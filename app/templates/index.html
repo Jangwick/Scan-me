@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#10b981',
+                        accent: '#8b5cf6'
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        .notification-popup {
+            animation: slideInRight 0.5s ease-out;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .scanner-overlay {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        .scan-area {
+            border: 3px dashed #10b981;
+            border-radius: 12px;
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .pulse-ring {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); }
+            70% { transform: scale(1); }
+            100% { transform: scale(0.95); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center">
+                        <i class="fas fa-qrcode text-2xl text-blue-600 mr-3"></i>
+                        <h1 class="text-xl font-bold text-gray-900">QR Attendance System</h1>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    {% if session.user_id %}
+                        <div class="flex items-center space-x-3">
+                            <span class="text-sm text-gray-700">Welcome, {{ session.full_name }}</span>
+                            <a href="{{ url_for('dashboard') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200">
+                                <i class="fas fa-tachometer-alt mr-1"></i> Dashboard
+                            </a>
+                            <a href="{{ url_for('logout') }}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200">
+                                <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                            </a>
+                        </div>
+                    {% else %}
+                        <a href="{{ url_for('login') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200">
+                            <i class="fas fa-sign-in-alt mr-1"></i> Login
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-6 space-y-2">
+                    {% for category, message in messages %}
+                        <div class="alert-{{ category }} p-4 rounded-md border" x-data="{ show: true }" x-show="show" x-transition>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center">
+                                    {% if category == 'success' %}
+                                        <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                                        <span class="text-green-800">{{ message }}</span>
+                                    {% elif category == 'error' %}
+                                        <i class="fas fa-exclamation-circle text-red-600 mr-2"></i>
+                                        <span class="text-red-800">{{ message }}</span>
+                                    {% elif category == 'warning' %}
+                                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                        <span class="text-yellow-800">{{ message }}</span>
+                                    {% else %}
+                                        <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                                        <span class="text-blue-800">{{ message }}</span>
+                                    {% endif %}
+                                </div>
+                                <button @click="show = false" class="text-gray-400 hover:text-gray-600">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Hero Section -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-xl text-white p-8 mb-8">
+            <div class="flex flex-col lg:flex-row items-center justify-between">
+                <div class="lg:w-1/2 mb-6 lg:mb-0">
+                    <h1 class="text-4xl font-bold mb-4">Welcome to QR Code Attendance System</h1>
+                    <p class="text-xl mb-6 opacity-90">Streamline your attendance tracking with our advanced QR code scanning technology. Fast, accurate, and reliable attendance management for modern institutions.</p>
+                    {% if not session.user_id %}
+                        <div class="flex space-x-4">
+                            <a href="{{ url_for('login') }}" class="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition duration-200">
+                                Get Started
+                            </a>
+                            <a href="#features" class="border-2 border-white text-white px-6 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition duration-200">
+                                Learn More
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="flex space-x-4">
+                            <a href="{{ url_for('scan_page') }}" class="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition duration-200">
+                                <i class="fas fa-qrcode mr-2"></i> Scan QR Code
+                            </a>
+                            <a href="{{ url_for('dashboard') }}" class="border-2 border-white text-white px-6 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition duration-200">
+                                <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="lg:w-1/2 text-center">
+                    <div class="bg-white bg-opacity-20 rounded-xl p-6 backdrop-blur-sm">
+                        <i class="fas fa-qrcode text-6xl mb-4 opacity-80"></i>
+                        <p class="text-lg font-semibold">Scan. Track. Analyze.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+                <div class="flex items-center">
+                    <div class="p-3 bg-blue-100 rounded-full mr-4">
+                        <i class="fas fa-users text-blue-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">Total Students</h3>
+                        <p class="text-3xl font-bold text-blue-600">{{ stats.total_students or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+                <div class="flex items-center">
+                    <div class="p-3 bg-green-100 rounded-full mr-4">
+                        <i class="fas fa-door-open text-green-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">Total Rooms</h3>
+                        <p class="text-3xl font-bold text-green-600">{{ stats.total_rooms or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+                <div class="flex items-center">
+                    <div class="p-3 bg-purple-100 rounded-full mr-4">
+                        <i class="fas fa-calendar-check text-purple-600 text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">Today's Scans</h3>
+                        <p class="text-3xl font-bold text-purple-600">{{ stats.today_scans or 0 }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity Section -->
+        {% if recent_scans %}
+        <div class="bg-white rounded-xl shadow-md mb-8">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-clock text-blue-600 mr-2"></i>
+                    Recent Activity
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4">
+                    {% for scan in recent_scans[:5] %}
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition duration-200">
+                        <div class="flex items-center space-x-4">
+                            <div class="flex-shrink-0">
+                                {% if scan.status == 'present' %}
+                                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-check text-green-600"></i>
+                                    </div>
+                                {% elif scan.status == 'late' %}
+                                    <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-clock text-yellow-600"></i>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-800">
+                                    {{ scan.first_name }} {{ scan.last_name }}
+                                </p>
+                                <p class="text-sm text-gray-600">
+                                    {{ scan.department }} {{ scan.year_level }}{{ scan.section }} • {{ scan.room_name }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-medium text-gray-800">{{ scan.scan_date }}</p>
+                            <p class="text-sm text-gray-600">{{ scan.scan_time }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                {% if session.user_id %}
+                <div class="mt-6 text-center">
+                    <a href="{{ url_for('dashboard') }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                        View All Activity <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Features Section -->
+        <div id="features" class="bg-white rounded-xl shadow-md mb-8">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-star text-blue-600 mr-2"></i>
+                    Key Features
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-qrcode text-blue-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">QR Code Scanning</h3>
+                        <p class="text-gray-600 text-sm">Fast and accurate QR code scanning for instant attendance recording</p>
+                    </div>
+                    
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-bell text-green-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">Real-time Notifications</h3>
+                        <p class="text-gray-600 text-sm">Instant notifications for attendance events and system updates</p>
+                    </div>
+                    
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-chart-bar text-purple-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">Analytics & Reports</h3>
+                        <p class="text-gray-600 text-sm">Comprehensive attendance analytics and customizable reports</p>
+                    </div>
+                    
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-door-open text-yellow-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">Room Management</h3>
+                        <p class="text-gray-600 text-sm">Efficient room-based attendance tracking and management</p>
+                    </div>
+                    
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-download text-red-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">Data Export</h3>
+                        <p class="text-gray-600 text-sm">Export attendance data to Excel, CSV, and PDF formats</p>
+                    </div>
+                    
+                    <div class="text-center p-4">
+                        <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-shield-alt text-indigo-600 text-2xl"></i>
+                        </div>
+                        <h3 class="font-semibold text-gray-800 mb-2">Secure Access</h3>
+                        <p class="text-gray-600 text-sm">Role-based security with encrypted data protection</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Access Section -->
+        {% if session.user_id %}
+        <div class="bg-white rounded-xl shadow-md">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-bolt text-blue-600 mr-2"></i>
+                    Quick Access
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <a href="{{ url_for('scan_page') }}" class="block p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-center transition duration-200 border-2 border-transparent hover:border-blue-200">
+                        <i class="fas fa-qrcode text-blue-600 text-2xl mb-2"></i>
+                        <p class="font-semibold text-blue-800">Scan QR Code</p>
+                    </a>
+                    
+                    <a href="{{ url_for('dashboard') }}" class="block p-4 bg-green-50 hover:bg-green-100 rounded-lg text-center transition duration-200 border-2 border-transparent hover:border-green-200">
+                        <i class="fas fa-tachometer-alt text-green-600 text-2xl mb-2"></i>
+                        <p class="font-semibold text-green-800">Dashboard</p>
+                    </a>
+                    
+                    {% if session.user_type == 'admin' %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="block p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-center transition duration-200 border-2 border-transparent hover:border-purple-200">
+                        <i class="fas fa-cogs text-purple-600 text-2xl mb-2"></i>
+                        <p class="font-semibold text-purple-800">Admin Panel</p>
+                    </a>
+                    {% endif %}
+                    
+                    <a href="#" onclick="showNotifications()" class="block p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-center transition duration-200 border-2 border-transparent hover:border-yellow-200">
+                        <i class="fas fa-bell text-yellow-600 text-2xl mb-2"></i>
+                        <p class="font-semibold text-yellow-800">Notifications</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white mt-12">
+        <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row justify-between items-center">
+                <div class="mb-4 lg:mb-0">
+                    <div class="flex items-center">
+                        <i class="fas fa-qrcode text-2xl mr-3"></i>
+                        <span class="text-xl font-bold">QR Attendance System</span>
+                    </div>
+                    <p class="text-gray-400 mt-2">Modern attendance tracking solution</p>
+                </div>
+                
+                <div class="text-center lg:text-right">
+                    <p class="text-gray-400">&copy; 2025 QR Attendance System. All rights reserved.</p>
+                    <p class="text-gray-500 text-sm mt-1">Powered by Flask & Tailwind CSS</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Notification Popup -->
+    <div id="notificationPopup" class="fixed top-4 right-4 max-w-sm w-full bg-white border-l-4 border-green-500 rounded-lg shadow-lg notification-popup hidden z-50" x-data="{ show: false }" x-show="show" x-transition>
+        <div class="p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-check-circle text-green-500 mr-3"></i>
+                    <div>
+                        <p class="font-semibold text-gray-800" id="notificationTitle">Notification</p>
+                        <p class="text-gray-600 text-sm" id="notificationMessage">Message content</p>
+                    </div>
+                </div>
+                <button onclick="hideNotification()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Global notification functions
+        function showNotification(title, message, type = 'success') {
+            const popup = document.getElementById('notificationPopup');
+            const titleEl = document.getElementById('notificationTitle');
+            const messageEl = document.getElementById('notificationMessage');
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            // Update styling based on type
+            const icon = popup.querySelector('i');
+            const borderClass = type === 'success' ? 'border-green-500' : 
+                               type === 'error' ? 'border-red-500' : 
+                               type === 'warning' ? 'border-yellow-500' : 'border-blue-500';
+            
+            popup.className = `fixed top-4 right-4 max-w-sm w-full bg-white border-l-4 ${borderClass} rounded-lg shadow-lg notification-popup z-50`;
+            
+            popup.style.display = 'block';
+            setTimeout(() => {
+                popup.style.display = 'none';
+            }, 5000);
+        }
+        
+        function hideNotification() {
+            document.getElementById('notificationPopup').style.display = 'none';
+        }
+        
+        function showNotifications() {
+            // This would typically fetch and display user notifications
+            showNotification('Notifications', 'No new notifications');
+        }
+        
+        // Auto-hide flash messages
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('[class*="alert-"]');
+            alerts.forEach(alert => {
+                if (alert.getAttribute('x-data')) {
+                    alert.__x.$data.show = false;
+                }
+            });
+        }, 5000);
+    </script>
+</body>
+</html>

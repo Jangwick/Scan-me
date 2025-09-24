@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - QR Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        .login-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .form-input:focus {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .password-strength-weak { color: #ef4444; }
+        .password-strength-medium { color: #f59e0b; }
+        .password-strength-strong { color: #10b981; }
+    </style>
+</head>
+<body class="login-bg min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <!-- Header -->
+        <div class="text-center">
+            <div class="flex justify-center">
+                <div class="bg-white p-4 rounded-full shadow-lg">
+                    <i class="fas fa-qrcode text-4xl text-indigo-600"></i>
+                </div>
+            </div>
+            <h2 class="mt-6 text-3xl font-bold text-white">Sign in to your account</h2>
+            <p class="mt-2 text-sm text-indigo-100">
+                Access the QR Code Attendance System
+            </p>
+        </div>
+
+        <!-- Login Form -->
+        <div class="bg-white rounded-xl shadow-2xl p-8" x-data="loginForm()">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="mb-6 space-y-2">
+                        {% for category, message in messages %}
+                            <div class="alert-{{ category }} p-3 rounded-md text-sm" x-data="{ show: true }" x-show="show" x-transition>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        {% if category == 'success' %}
+                                            <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                                            <span class="text-green-800">{{ message }}</span>
+                                        {% elif category == 'error' %}
+                                            <i class="fas fa-exclamation-circle text-red-600 mr-2"></i>
+                                            <span class="text-red-800">{{ message }}</span>
+                                        {% elif category == 'warning' %}
+                                            <i class="fas fa-exclamation-triangle text-yellow-600 mr-2"></i>
+                                            <span class="text-yellow-800">{{ message }}</span>
+                                        {% else %}
+                                            <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                                            <span class="text-blue-800">{{ message }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <button @click="show = false" class="text-gray-400 hover:text-gray-600">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" @submit="handleSubmit">
+                <!-- Username Field -->
+                <div class="mb-6">
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-user mr-1"></i> Username
+                    </label>
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            required
+                            x-model="form.username"
+                            @input="validateUsername"
+                            class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200"
+                            placeholder="Enter your username"
+                            :class="{ 'border-red-300': errors.username }"
+                        >
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-400"></i>
+                        </div>
+                    </div>
+                    <p x-show="errors.username" x-text="errors.username" class="mt-1 text-sm text-red-600"></p>
+                </div>
+
+                <!-- Password Field -->
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-lock mr-1"></i> Password
+                    </label>
+                    <div class="relative">
+                        <input
+                            :type="showPassword ? 'text' : 'password'"
+                            id="password"
+                            name="password"
+                            required
+                            x-model="form.password"
+                            @input="validatePassword"
+                            class="form-input w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200 pr-12"
+                            placeholder="Enter your password"
+                            :class="{ 'border-red-300': errors.password }"
+                        >
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center space-x-2">
+                            <button
+                                type="button"
+                                @click="showPassword = !showPassword"
+                                class="text-gray-400 hover:text-gray-600 focus:outline-none"
+                            >
+                                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p x-show="errors.password" x-text="errors.password" class="mt-1 text-sm text-red-600"></p>
+                </div>
+
+                <!-- Remember Me & Forgot Password -->
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <input
+                            type="checkbox"
+                            id="remember_me"
+                            name="remember_me"
+                            x-model="form.remember_me"
+                            class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        >
+                        <label for="remember_me" class="ml-2 block text-sm text-gray-700">
+                            Remember me
+                        </label>
+                    </div>
+                    <a href="#" @click="showForgotPassword = true" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                        Forgot password?
+                    </a>
+                </div>
+
+                <!-- Login Button -->
+                <button
+                    type="submit"
+                    :disabled="loading || !isFormValid"
+                    class="w-full flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+                >
+                    <i x-show="loading" class="fas fa-spinner fa-spin mr-2"></i>
+                    <span x-text="loading ? 'Signing in...' : 'Sign in'"></span>
+                </button>
+
+                <!-- Additional Options -->
+                <div class="mt-6 text-center">
+                    <p class="text-sm text-gray-600">
+                        Don't have an account? 
+                        <a href="#" @click="showRegistration = true" class="text-indigo-600 hover:text-indigo-800 font-medium">
+                            Contact administrator
+                        </a>
+                    </p>
+                </div>
+            </form>
+
+            <!-- Quick Login Options (for demo) -->
+            <div class="mt-8 border-t border-gray-200 pt-6">
+                <p class="text-sm text-gray-600 text-center mb-4">Quick login for testing:</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button
+                        @click="quickLogin('admin', 'admin123')"
+                        class="px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition duration-200"
+                    >
+                        <i class="fas fa-user-shield mr-1"></i> Admin Login
+                    </button>
+                    <button
+                        @click="quickLogin('professor1', 'prof123')"
+                        class="px-3 py-2 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition duration-200"
+                    >
+                        <i class="fas fa-chalkboard-teacher mr-1"></i> Professor Login
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Forgot Password Modal -->
+        <div x-show="showForgotPassword" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.away="showForgotPassword = false">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" @click.stop>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Reset Password</h3>
+                    <button @click="showForgotPassword = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <p class="text-gray-600 mb-4">Contact your administrator to reset your password.</p>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                    <div class="flex">
+                        <i class="fas fa-exclamation-triangle text-yellow-600 mr-2 mt-0.5"></i>
+                        <div>
+                            <p class="text-sm text-yellow-800 font-medium">Administrator Contact</p>
+                            <p class="text-sm text-yellow-700 mt-1">Email: admin@school.edu</p>
+                            <p class="text-sm text-yellow-700">Phone: (555) 123-4567</p>
+                        </div>
+                    </div>
+                </div>
+                <button
+                    @click="showForgotPassword = false"
+                    class="mt-4 w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition duration-200"
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+
+        <!-- Registration Info Modal -->
+        <div x-show="showRegistration" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.away="showRegistration = false">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" @click.stop>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Account Registration</h3>
+                    <button @click="showRegistration = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-user-plus text-blue-600 text-2xl"></i>
+                    </div>
+                    <p class="text-gray-600 mb-4">New accounts are created by administrators only. Please contact your administrator to request access.</p>
+                    <div class="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+                        <div class="flex">
+                            <i class="fas fa-info-circle text-blue-600 mr-2 mt-0.5"></i>
+                            <div class="text-left">
+                                <p class="text-sm text-blue-800 font-medium">Required Information</p>
+                                <ul class="text-sm text-blue-700 mt-1 space-y-1">
+                                    <li>• Full name and ID number</li>
+                                    <li>• Department/Role</li>
+                                    <li>• Email address</li>
+                                    <li>• Reason for access</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button
+                    @click="showRegistration = false"
+                    class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-200"
+                >
+                    Got it
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-indigo-100">
+            <p class="text-sm">&copy; 2025 QR Attendance System</p>
+            <p class="text-xs mt-1 opacity-75">Secure authentication system</p>
+        </div>
+    </div>
+
+    <script>
+        function loginForm() {
+            return {
+                form: {
+                    username: '',
+                    password: '',
+                    remember_me: false
+                },
+                errors: {},
+                loading: false,
+                showPassword: false,
+                showForgotPassword: false,
+                showRegistration: false,
+                
+                get isFormValid() {
+                    return this.form.username.length >= 3 && 
+                           this.form.password.length >= 6 && 
+                           Object.keys(this.errors).length === 0;
+                },
+                
+                validateUsername() {
+                    if (this.form.username.length < 3) {
+                        this.errors.username = 'Username must be at least 3 characters';
+                    } else if (!/^[a-zA-Z0-9_]+$/.test(this.form.username)) {
+                        this.errors.username = 'Username can only contain letters, numbers, and underscores';
+                    } else {
+                        delete this.errors.username;
+                    }
+                },
+                
+                validatePassword() {
+                    if (this.form.password.length < 6) {
+                        this.errors.password = 'Password must be at least 6 characters';
+                    } else {
+                        delete this.errors.password;
+                    }
+                },
+                
+                quickLogin(username, password) {
+                    this.form.username = username;
+                    this.form.password = password;
+                    this.validateUsername();
+                    this.validatePassword();
+                    
+                    // Simulate form submission
+                    if (this.isFormValid) {
+                        this.loading = true;
+                        setTimeout(() => {
+                            document.querySelector('form').submit();
+                        }, 500);
+                    }
+                },
+                
+                handleSubmit(event) {
+                    this.loading = true;
+                    this.validateUsername();
+                    this.validatePassword();
+                    
+                    if (!this.isFormValid) {
+                        event.preventDefault();
+                        this.loading = false;
+                        return false;
+                    }
+                    
+                    // Add loading state
+                    setTimeout(() => {
+                        if (this.loading) {
+                            this.loading = false;
+                        }
+                    }, 5000);
+                }
+            }
+        }
+        
+        // Auto-hide flash messages
+        setTimeout(() => {
+            const alerts = document.querySelectorAll('[class*="alert-"]');
+            alerts.forEach(alert => {
+                if (alert.__x && alert.__x.$data) {
+                    alert.__x.$data.show = false;
+                }
+            });
+        }, 5000);
+        
+        // Prevent form resubmission on page refresh
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
+    </script>
+</body>
+</html>

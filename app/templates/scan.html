@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner - QR Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        .scanner-container {
+            position: relative;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .scan-area {
+            border: 3px dashed #10b981;
+            border-radius: 12px;
+            background: rgba(16, 185, 129, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .scan-corners {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+        }
+        .scan-corner-tl {
+            top: 10px;
+            left: 10px;
+            border-top: 4px solid #10b981;
+            border-left: 4px solid #10b981;
+        }
+        .scan-corner-tr {
+            top: 10px;
+            right: 10px;
+            border-top: 4px solid #10b981;
+            border-right: 4px solid #10b981;
+        }
+        .scan-corner-bl {
+            bottom: 10px;
+            left: 10px;
+            border-bottom: 4px solid #10b981;
+            border-left: 4px solid #10b981;
+        }
+        .scan-corner-br {
+            bottom: 10px;
+            right: 10px;
+            border-bottom: 4px solid #10b981;
+            border-right: 4px solid #10b981;
+        }
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #10b981, transparent);
+            animation: scanLine 2s linear infinite;
+        }
+        @keyframes scanLine {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        .pulse-ring {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.7; }
+            100% { transform: scale(0.95); opacity: 1; }
+        }
+        .success-animation {
+            animation: successPulse 0.6s ease-out;
+        }
+        @keyframes successPulse {
+            0% { transform: scale(1); background-color: rgba(16, 185, 129, 0.1); }
+            50% { transform: scale(1.05); background-color: rgba(16, 185, 129, 0.3); }
+            100% { transform: scale(1); background-color: rgba(16, 185, 129, 0.1); }
+        }
+        .error-animation {
+            animation: errorShake 0.6s ease-out;
+        }
+        @keyframes errorShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        .result-card {
+            animation: slideUp 0.5s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('index') }}" class="flex-shrink-0 flex items-center">
+                        <i class="fas fa-qrcode text-2xl text-blue-600 mr-3"></i>
+                        <h1 class="text-xl font-bold text-gray-900">QR Scanner</h1>
+                    </a>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <a href="{{ url_for('dashboard') }}" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-tachometer-alt mr-1"></i> Dashboard
+                    </a>
+                    <a href="{{ url_for('logout') }}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-200">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="qrScanner()">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">QR Code Scanner</h1>
+            <p class="text-gray-600">Point your camera at a QR code to record attendance</p>
+        </div>
+
+        <!-- Scanner Section -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div class="scanner-container">
+                <!-- Camera View -->
+                <div class="relative">
+                    <div class="scan-area p-4" :class="scanAreaClass">
+                        <video
+                            x-ref="video"
+                            autoplay
+                            playsinline
+                            muted
+                            class="w-full h-80 object-cover rounded-lg bg-gray-900"
+                            x-show="cameraActive"
+                        ></video>
+                        
+                        <!-- Scanner Overlay -->
+                        <div x-show="cameraActive" class="absolute inset-0">
+                            <div class="scan-corners scan-corner-tl"></div>
+                            <div class="scan-corners scan-corner-tr"></div>
+                            <div class="scan-corners scan-corner-bl"></div>
+                            <div class="scan-corners scan-corner-br"></div>
+                            <div class="scan-line" x-show="scanning"></div>
+                        </div>
+                        
+                        <!-- Camera Not Active -->
+                        <div x-show="!cameraActive" class="w-full h-80 flex flex-col items-center justify-center text-gray-500 bg-gray-100 rounded-lg">
+                            <i class="fas fa-camera text-6xl mb-4"></i>
+                            <p class="text-lg font-medium mb-2">Camera Not Active</p>
+                            <p class="text-sm text-center px-4">Click "Start Scanner" to begin scanning QR codes</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden canvas for QR processing -->
+                    <canvas x-ref="canvas" style="display: none;"></canvas>
+                </div>
+
+                <!-- Scanner Controls -->
+                <div class="flex flex-col sm:flex-row gap-4 mt-6">
+                    <button
+                        @click="toggleScanner"
+                        :disabled="loading"
+                        class="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-semibold transition duration-200 flex items-center justify-center"
+                    >
+                        <i x-show="loading" class="fas fa-spinner fa-spin mr-2"></i>
+                        <i x-show="!loading && !cameraActive" class="fas fa-play mr-2"></i>
+                        <i x-show="!loading && cameraActive" class="fas fa-stop mr-2"></i>
+                        <span x-text="cameraActive ? 'Stop Scanner' : 'Start Scanner'"></span>
+                    </button>
+                    
+                    <button
+                        @click="switchCamera"
+                        :disabled="!cameraActive || cameras.length <= 1"
+                        class="px-6 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white rounded-lg font-semibold transition duration-200 flex items-center justify-center"
+                    >
+                        <i class="fas fa-camera-rotate mr-2"></i>
+                        Switch Camera
+                    </button>
+                    
+                    <label class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition duration-200 flex items-center justify-center cursor-pointer">
+                        <i class="fas fa-upload mr-2"></i>
+                        Upload Image
+                        <input type="file" accept="image/*" @change="handleFileUpload" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div x-show="message" class="result-card mb-6" x-transition>
+            <div class="p-4 rounded-lg border-l-4" :class="messageClass">
+                <div class="flex items-center">
+                    <i :class="messageIcon" class="mr-3"></i>
+                    <div>
+                        <p class="font-semibold" x-text="message"></p>
+                        <p x-show="messageDetails" class="text-sm mt-1 opacity-90" x-text="messageDetails"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scan Result -->
+        <div x-show="scanResult" class="result-card bg-white rounded-xl shadow-lg p-6 mb-8" x-transition>
+            <div class="flex items-start space-x-4">
+                <div class="flex-shrink-0">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-check text-green-600 text-xl"></i>
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Attendance Recorded Successfully</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-gray-600">Student:</p>
+                            <p class="font-medium text-gray-900" x-text="scanResult.student_name"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600">Student ID:</p>
+                            <p class="font-medium text-gray-900" x-text="scanResult.student_id"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600">Room:</p>
+                            <p class="font-medium text-gray-900" x-text="scanResult.room_name"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600">Time:</p>
+                            <p class="font-medium text-gray-900" x-text="scanResult.scan_time"></p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600">Status:</p>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                  :class="scanResult.status === 'present' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'">
+                                <i :class="scanResult.status === 'present' ? 'fas fa-check' : 'fas fa-clock'" class="mr-1"></i>
+                                <span x-text="scanResult.status === 'present' ? 'Present' : 'Late'"></span>
+                            </span>
+                        </div>
+                        <div>
+                            <p class="text-gray-600">Department:</p>
+                            <p class="font-medium text-gray-900" x-text="scanResult.department"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Scans -->
+        <div class="bg-white rounded-xl shadow-lg">
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-bold text-gray-800">Recent Scans</h2>
+                    <span class="text-sm text-gray-600" x-text="`${recentScans.length} scans today`"></span>
+                </div>
+            </div>
+            <div class="p-6">
+                <div x-show="recentScans.length === 0" class="text-center py-8 text-gray-500">
+                    <i class="fas fa-qrcode text-4xl mb-3"></i>
+                    <p class="text-lg font-medium">No scans yet</p>
+                    <p class="text-sm">Start scanning QR codes to see results here</p>
+                </div>
+                
+                <div x-show="recentScans.length > 0" class="space-y-3">
+                    <template x-for="scan in recentScans.slice().reverse()" :key="scan.id">
+                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition duration-200">
+                            <div class="flex items-center space-x-3">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center"
+                                         :class="scan.status === 'present' ? 'bg-green-100' : 'bg-yellow-100'">
+                                        <i :class="scan.status === 'present' ? 'fas fa-check text-green-600' : 'fas fa-clock text-yellow-600'" class="text-sm"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-800" x-text="scan.student_name"></p>
+                                    <p class="text-sm text-gray-600" x-text="`${scan.room_name} • ${scan.department}`"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm font-medium text-gray-800" x-text="scan.scan_time"></p>
+                                <span class="text-xs px-2 py-1 rounded-full"
+                                      :class="scan.status === 'present' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                                      x-text="scan.status === 'present' ? 'Present' : 'Late'">
+                                </span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="mt-8 bg-blue-50 rounded-xl p-6">
+            <div class="flex items-start space-x-3">
+                <i class="fas fa-info-circle text-blue-600 mt-1"></i>
+                <div>
+                    <h3 class="text-lg font-semibold text-blue-900 mb-2">How to Use QR Scanner</h3>
+                    <ul class="text-blue-800 space-y-2 text-sm">
+                        <li>• Click "Start Scanner" to activate your camera</li>
+                        <li>• Position the QR code within the scanning area</li>
+                        <li>• Wait for the green confirmation message</li>
+                        <li>• You can also upload an image containing a QR code</li>
+                        <li>• Use "Switch Camera" if you have multiple cameras</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function qrScanner() {
+            return {
+                cameraActive: false,
+                scanning: false,
+                loading: false,
+                message: '',
+                messageDetails: '',
+                messageType: 'info',
+                scanResult: null,
+                recentScans: [],
+                cameras: [],
+                currentCameraIndex: 0,
+                stream: null,
+                scanInterval: null,
+                
+                get scanAreaClass() {
+                    if (this.messageType === 'success') return 'success-animation';
+                    if (this.messageType === 'error') return 'error-animation';
+                    return '';
+                },
+                
+                get messageClass() {
+                    const classes = {
+                        'success': 'bg-green-50 border-green-400 text-green-800',
+                        'error': 'bg-red-50 border-red-400 text-red-800',
+                        'warning': 'bg-yellow-50 border-yellow-400 text-yellow-800',
+                        'info': 'bg-blue-50 border-blue-400 text-blue-800'
+                    };
+                    return classes[this.messageType] || classes.info;
+                },
+                
+                get messageIcon() {
+                    const icons = {
+                        'success': 'fas fa-check-circle text-green-600',
+                        'error': 'fas fa-exclamation-circle text-red-600',
+                        'warning': 'fas fa-exclamation-triangle text-yellow-600',
+                        'info': 'fas fa-info-circle text-blue-600'
+                    };
+                    return icons[this.messageType] || icons.info;
+                },
+                
+                init() {
+                    this.getCameras();
+                    this.loadRecentScans();
+                },
+                
+                async getCameras() {
+                    try {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        this.cameras = devices.filter(device => device.kind === 'videoinput');
+                    } catch (error) {
+                        console.error('Error getting cameras:', error);
+                    }
+                },
+                
+                async toggleScanner() {
+                    if (this.cameraActive) {
+                        this.stopScanner();
+                    } else {
+                        await this.startScanner();
+                    }
+                },
+                
+                async startScanner() {
+                    this.loading = true;
+                    this.showMessage('Starting camera...', '', 'info');
+                    
+                    try {
+                        const constraints = {
+                            video: {
+                                facingMode: 'environment',
+                                width: { ideal: 640 },
+                                height: { ideal: 480 }
+                            }
+                        };
+                        
+                        if (this.cameras.length > 0 && this.currentCameraIndex < this.cameras.length) {
+                            constraints.video.deviceId = this.cameras[this.currentCameraIndex].deviceId;
+                        }
+                        
+                        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        this.$refs.video.srcObject = this.stream;
+                        
+                        this.cameraActive = true;
+                        this.scanning = true;
+                        this.startScanning();
+                        
+                        this.showMessage('Scanner active', 'Point camera at QR code', 'success');
+                    } catch (error) {
+                        console.error('Error starting scanner:', error);
+                        this.showMessage('Camera Error', 'Unable to access camera. Please check permissions.', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                stopScanner() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                    }
+                    
+                    if (this.scanInterval) {
+                        clearInterval(this.scanInterval);
+                        this.scanInterval = null;
+                    }
+                    
+                    this.cameraActive = false;
+                    this.scanning = false;
+                    this.showMessage('Scanner stopped', '', 'info');
+                },
+                
+                startScanning() {
+                    this.scanInterval = setInterval(() => {
+                        if (this.cameraActive && this.$refs.video.videoWidth > 0) {
+                            this.scanFrame();
+                        }
+                    }, 250);
+                },
+                
+                scanFrame() {
+                    const video = this.$refs.video;
+                    const canvas = this.$refs.canvas;
+                    const context = canvas.getContext('2d');
+                    
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (code) {
+                        this.processScan(code.data);
+                    }
+                },
+                
+                async switchCamera() {
+                    if (this.cameras.length <= 1) return;
+                    
+                    this.currentCameraIndex = (this.currentCameraIndex + 1) % this.cameras.length;
+                    
+                    if (this.cameraActive) {
+                        this.stopScanner();
+                        await this.startScanner();
+                    }
+                },
+                
+                async handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    this.loading = true;
+                    this.showMessage('Processing image...', '', 'info');
+                    
+                    try {
+                        const imageData = await this.getImageData(file);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        
+                        if (code) {
+                            this.processScan(code.data);
+                        } else {
+                            this.showMessage('No QR Code Found', 'Please upload an image containing a valid QR code', 'warning');
+                        }
+                    } catch (error) {
+                        console.error('Error processing image:', error);
+                        this.showMessage('Processing Error', 'Unable to process the uploaded image', 'error');
+                    } finally {
+                        this.loading = false;
+                        event.target.value = '';
+                    }
+                },
+                
+                getImageData(file) {
+                    return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        
+                        img.onload = function() {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            context.drawImage(img, 0, 0);
+                            
+                            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                            resolve(imageData);
+                        };
+                        
+                        img.onerror = reject;
+                        img.src = URL.createObjectURL(file);
+                    });
+                },
+                
+                async processScan(qrData) {
+                    this.loading = true;
+                    this.showMessage('Processing scan...', '', 'info');
+                    
+                    try {
+                        const response = await fetch('/api/scan', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ qr_data: qrData })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.scanResult = result.data;
+                            this.recentScans.push(result.data);
+                            this.showMessage('Attendance Recorded!', `${result.data.student_name} marked as ${result.data.status}`, 'success');
+                        } else {
+                            this.showMessage('Scan Failed', result.message || 'Invalid QR code or scan error', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error processing scan:', error);
+                        this.showMessage('Network Error', 'Unable to process scan. Please try again.', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async loadRecentScans() {
+                    try {
+                        const response = await fetch('/api/recent-scans');
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            this.recentScans = result.data;
+                        }
+                    } catch (error) {
+                        console.error('Error loading recent scans:', error);
+                    }
+                },
+                
+                showMessage(message, details = '', type = 'info') {
+                    this.message = message;
+                    this.messageDetails = details;
+                    this.messageType = type;
+                    
+                    // Auto-hide non-error messages
+                    if (type !== 'error') {
+                        setTimeout(() => {
+                            this.message = '';
+                            this.messageDetails = '';
+                        }, 5000);
+                    }
+                }
+            }
+        }
+        
+        // Request camera permissions on page load
+        window.addEventListener('load', async () => {
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true });
+            } catch (error) {
+                console.log('Camera permission not granted initially');
+            }
+        });
+    </script>
+</body>
+</html>
