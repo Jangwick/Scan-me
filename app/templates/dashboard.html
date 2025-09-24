@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - QR Attendance System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="{{ url_for('static', filename='css/tailwind.css') }}" rel="stylesheet">
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -27,6 +27,32 @@
         }
         .pulse-dot {
             animation: pulse 2s infinite;
+        }
+        
+        /* Chart container styles to prevent layout issues */
+        .chart-container {
+            position: relative;
+            height: 16rem;
+            width: 100%;
+        }
+        
+        .chart-container canvas {
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            max-width: 100% !important;
+            max-height: 100% !important;
+        }
+        
+        /* Prevent chart jumping during resize */
+        .chart-loading {
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+        
+        /* Smooth chart transitions */
+        #attendanceChart, #roomChart {
+            transition: all 0.3s ease;
         }
     </style>
 </head>
@@ -230,7 +256,9 @@
                         <button class="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded-md">30 Days</button>
                     </div>
                 </div>
-                <canvas id="attendanceChart" width="400" height="200"></canvas>
+                <div class="chart-container">
+                    <canvas id="attendanceChart"></canvas>
+                </div>
             </div>
 
             <!-- Room Utilization -->
@@ -239,7 +267,9 @@
                     <h2 class="text-xl font-bold text-gray-800">Room Utilization</h2>
                     <i class="fas fa-info-circle text-gray-400" title="Current room occupancy"></i>
                 </div>
-                <canvas id="roomChart" width="400" height="200"></canvas>
+                <div class="chart-container">
+                    <canvas id="roomChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -416,71 +446,157 @@
     </div>
 
     <script>
+        // Ensure charts are only created once
+        let attendanceChart = null;
+        let roomChart = null;
+        
         // Attendance Trends Chart
-        const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
-        new Chart(attendanceCtx, {
-            type: 'line',
-            data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                datasets: [{
-                    label: 'Present',
-                    data: [85, 92, 78, 95, 88, 76, 89],
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }, {
-                    label: 'Late',
-                    data: [12, 8, 15, 5, 10, 18, 7],
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
+        function createAttendanceChart() {
+            if (attendanceChart) {
+                attendanceChart.destroy();
+            }
+            
+            const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+            
+            // Get attendance trends data from server
+            {% if attendance_trends and attendance_trends.daily_counts %}
+                const attendanceData = {{ attendance_trends.daily_counts | tojson }};
+                const labels = attendanceData.map(item => {
+                    const date = new Date(item.scan_date);
+                    return date.toLocaleDateString('en-US', { weekday: 'short' });
+                });
+                const presentData = attendanceData.map(item => item.present_count || 0);
+                const lateData = attendanceData.map(item => item.late_count || 0);
+            {% else %}
+                // Fallback data if no real data available
+                const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                const presentData = [85, 92, 78, 95, 88, 76, 89];
+                const lateData = [12, 8, 15, 5, 10, 18, 7];
+            {% endif %}
+            
+            attendanceChart = new Chart(attendanceCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Present',
+                        data: presentData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }, {
+                        label: 'Late',
+                        data: lateData,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2
+                    }]
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                maxTicksLimit: 6
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    },
+                    layout: {
+                        padding: {
+                            top: 10,
+                            right: 10,
+                            bottom: 10,
+                            left: 10
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
 
         // Room Utilization Chart
-        const roomCtx = document.getElementById('roomChart').getContext('2d');
-        new Chart(roomCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105'],
-                datasets: [{
-                    data: [85, 70, 95, 60, 80],
-                    backgroundColor: [
-                        '#3b82f6',
-                        '#10b981',
-                        '#f59e0b',
-                        '#ef4444',
-                        '#8b5cf6'
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
+        function createRoomChart() {
+            if (roomChart) {
+                roomChart.destroy();
+            }
+            
+            const roomCtx = document.getElementById('roomChart').getContext('2d');
+            roomChart = new Chart(roomCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105'],
+                    datasets: [{
+                        data: [85, 70, 95, 60, 80],
+                        backgroundColor: [
+                            '#3b82f6',
+                            '#10b981',
+                            '#f59e0b',
+                            '#ef4444',
+                            '#8b5cf6'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        }
+                    },
+                    animation: {
+                        animateRotate: true,
+                        animateScale: false,
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    },
+                    cutout: '50%',
+                    layout: {
+                        padding: {
+                            top: 10,
+                            right: 10,
+                            bottom: 10,
+                            left: 10
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
 
         // Real-time updates simulation
         function updateStats() {
@@ -494,11 +610,59 @@
             }
         }
 
-        // Update stats every 30 seconds
+        // Initialize charts on page load
+        function initializeCharts() {
+            // Prevent multiple initializations
+            if (document.body.classList.contains('charts-initialized')) {
+                return;
+            }
+            
+            // Wait for DOM to be fully loaded
+            if (document.getElementById('attendanceChart')) {
+                createAttendanceChart();
+            }
+            if (document.getElementById('roomChart')) {
+                createRoomChart();
+            }
+            
+            // Mark as initialized
+            document.body.classList.add('charts-initialized');
+        }
+
+        // Handle window resize to prevent chart issues
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            
+            // Add loading class to prevent jumping
+            const chartContainers = document.querySelectorAll('.chart-container');
+            chartContainers.forEach(container => container.classList.add('chart-loading'));
+            
+            resizeTimeout = setTimeout(function() {
+                // Resize charts smoothly
+                if (attendanceChart) {
+                    attendanceChart.resize();
+                }
+                if (roomChart) {
+                    roomChart.resize();
+                }
+                
+                // Remove loading class
+                setTimeout(() => {
+                    chartContainers.forEach(container => container.classList.remove('chart-loading'));
+                }, 100);
+            }, 150);
+        });
+
+        // Update stats every 30 seconds (but don't recreate charts)
         setInterval(updateStats, 30000);
 
         // Animate statistics on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize charts first
+            setTimeout(initializeCharts, 100);
+            
+            // Then animate stat cards
             const statCards = document.querySelectorAll('.stat-card');
             statCards.forEach((card, index) => {
                 setTimeout(() => {

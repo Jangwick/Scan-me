@@ -192,12 +192,45 @@ def dashboard():
                 'recent_scans': recent_scans
             }
         
-        return render_template('dashboard.html', data=dashboard_data)
+        # Create basic stats for all users
+        today_summary = attendance_manager.get_today_attendance_summary()
+        recent_scans = attendance_manager.get_recent_attendance(limit=20)
+        attendance_trends = attendance_manager.get_attendance_trends(days=7)  # Get 7-day trends
+        
+        basic_stats = {
+            'total_students': student_manager.get_student_count(),
+            'total_professors': auth_manager.get_professor_count(), 
+            'total_rooms': room_manager.get_room_count(),
+            'today_scans': today_summary.get('total_scans', 0),
+            'active_sessions': today_summary.get('unique_students', 0),
+            'present_today': today_summary.get('unique_students', 0),
+            'late_today': 0,
+            'active_rooms': 0,
+            'recent_activity': recent_scans
+        }
+        
+        return render_template('dashboard.html', 
+                             stats=basic_stats,
+                             recent_scans=recent_scans,
+                             room_occupancy=[],
+                             attendance_trends=attendance_trends,
+                             data=dashboard_data)
     
     except Exception as e:
         logger.error(f"Dashboard error: {str(e)}")
         flash('Error loading dashboard data.', 'error')
-        return render_template('dashboard.html', data={})
+        # Provide fallback stats
+        fallback_stats = {
+            'total_students': 0, 'total_professors': 0, 'total_rooms': 0,
+            'today_scans': 0, 'active_sessions': 0, 'present_today': 0,
+            'late_today': 0, 'active_rooms': 0, 'recent_activity': []
+        }
+        return render_template('dashboard.html', 
+                             stats=fallback_stats,
+                             recent_scans=[],
+                             room_occupancy=[],
+                             attendance_trends={},
+                             data={})
 
 @app.route('/admin')
 @admin_required
@@ -227,12 +260,38 @@ def admin_dashboard():
             'attendance_trends': attendance_trends
         }
         
-        return render_template('dashboard.html', data=admin_data)
+        return render_template('dashboard.html', 
+                             stats=stats,
+                             recent_scans=stats['recent_activity'],
+                             room_occupancy=room_occupancy, 
+                             attendance_trends=attendance_trends,
+                             data=admin_data)
     
     except Exception as e:
         logger.error(f"Admin dashboard error: {str(e)}")
         flash('Error loading admin dashboard.', 'error')
-        return render_template('dashboard.html', data={})
+        # Provide empty stats structure to prevent template errors
+        fallback_data = {
+            'stats': {
+                'total_students': 0,
+                'total_professors': 0,
+                'total_rooms': 0,
+                'today_scans': 0,
+                'active_sessions': 0,
+                'present_today': 0,
+                'late_today': 0,
+                'active_rooms': 0,
+                'recent_activity': []
+            },
+            'room_occupancy': [],
+            'attendance_trends': {}
+        }
+        return render_template('dashboard.html', 
+                             stats=fallback_data['stats'],
+                             recent_scans=[],
+                             room_occupancy=[],
+                             attendance_trends={},
+                             data=fallback_data)
 
 @app.route('/scan')
 @login_required
